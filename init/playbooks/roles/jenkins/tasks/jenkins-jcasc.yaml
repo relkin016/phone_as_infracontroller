@@ -1,0 +1,162 @@
+---
+# Main tasks for jenkins-jcasc role
+# Applies Jenkins Configuration as Code
+
+- name: Wait for Jenkins to be fully started
+  ansible.builtin.uri:
+    url: "http://localhost:{{ jenkins_port }}/login"
+    status_code: [200, 403, 500]
+    timeout: 10
+  register: jenkins_ready
+  until: jenkins_ready.status in [200, 403]
+  retries: 60
+  delay: 15
+
+- name: Deploy JCasC configuration
+  ansible.builtin.template:
+    src: jenkins.yaml.j2
+    dest: "{{ jcasc_config_dest }}"
+    mode: "0644"
+    backup: true
+  notify: Reload JCasC
+
+- name: Set CASC_JENKINS_CONFIG environment variable
+  ansible.builtin.lineinfile:
+    path: "{{ jenkins_home }}/config.env"
+    line: "CASC_JENKINS_CONFIG={{ jcasc_config_dest }}"
+    create: true
+    mode: "0644"
+
+- name: Download Jenkins CLI
+  ansible.builtin.get_url:
+    url: "{{ jenkins_cli_url }}"
+    dest: "{{ jenkins_cli_jar }}"
+    mode: "0644"
+  retries: 3
+  delay: 10
+
+- name: Copy plugins.txt to remote machine
+  ansible.builtin.copy:
+    src: "{{ plugins_file_source }}"
+    dest: "{{ plugins_file_dest }}"
+    mode: "0644"
+  when: install_plugins_from_file | bool
+
+- name: Download jenkins-plugin-manager tool
+  ansible.builtin.get_url:
+    url: "https://github.com/jenkinsci/plugin-installation-manager-tool/releases/download/{{ plugin_manager_version }}/jenkins-plugin-manager-{{ plugin_manager_version }}.jar"
+    dest: "{{ jenkins_home }}/jenkins-plugin-manager.jar"
+    mode: "0644"
+  retries: 3
+  delay: 10
+  when: install_plugins_from_file | bool
+
+- name: Stop Jenkins service before plugin installation
+  ansible.builtin.command: sv down {{ termux_usr }}/var/service/jenkins
+  register: jenkins_stop_for_plugins
+  when: install_plugins_from_file | bool
+  changed_when: "'down:' in jenkins_stop_for_plugins.stdout"
+  failed_when: false
+
+- name: Wait for Jenkins to stop completely
+  ansible.builtin.wait_for:
+    port: "{{ jenkins_port }}"
+    state: stopped
+    timeout: 60
+  when: install_plugins_from_file | bool
+
+- name: Install plugins using jenkins-plugin-manager
+  ansible.builtin.shell: |
+    {{ java_bin }} -jar {{ jenkins_home }}/jenkins-plugin-manager.jar \
+      --war {{ jenkins_war }} \
+      --plugin-file {{ plugins_file_dest }} \
+      --plugin-download-directory {{ jenkins_home }}/plugins \
+      --verbose
+  when: install_plugins_from_file | bool
+  register: plugin_install
+  changed_when: "'Installed' in plugin_install.stdout or 'Updated' in plugin_install.stdout"
+  failed_when: plugin_install.rc != 0
+
+- name: Count installed plugins
+  ansible.builtin.find:
+    paths: "{{ jenkins_home }}/plugins"
+    patterns: "*.jpi"
+  register: installed_plugins
+  when: install_plugins_from_file | bool
+
+- name: Display plugin installation results
+  ansible.builtin.debug:
+    msg:
+      - "Plugin installation complete!"
+      - "Plugins installed: {{ installed_plugins.matched | default(0) }}"
+      - "Installation output available for debugging"
+  when: install_plugins_from_file | bool
+
+- name: Start Jenkins service with new plugins
+  ansible.builtin.command: sv up {{ termux_usr }}/var/service/jenkins
+  when: install_plugins_from_file | bool
+  register: jenkins_start_after_plugins
+  changed_when: "'run:' in jenkins_start_after_plugins.stdout or 'ok:' in jenkins_start_after_plugins.stdout"
+
+- name: Wait for Jenkins port to be available
+  ansible.builtin.wait_for:
+    port: "{{ jenkins_port }}"
+    state: started
+    delay: 5
+    timeout: 60
+  when: install_plugins_from_file | bool
+
+- name: Wait for Jenkins to restart
+  ansible.builtin.uri:
+    url: "http://localhost:{{ jenkins_port }}/login"
+    status_code: [200, 403, 500]
+    timeout: 10
+  register: jenkins_restarted
+  until: jenkins_restarted.status in [200, 403]
+  retries: 60
+  delay: 15
+  when: install_plugins_from_file | bool
+
+- name: Wait for plugins to be extracted
+  ansible.builtin.pause:
+    seconds: 30
+    prompt: "Waiting for Jenkins to extract all plugins..."
+  when: install_plugins_from_file | bool
+
+- name: Reload JCasC configuration
+  ansible.builtin.uri:
+    url: "http://localhost:{{ jenkins_port }}/configuration-as-code/reload"
+    method: POST
+    user: "{{ jenkins_admin_user }}"
+    password: "{{ jenkins_admin_password }}"
+    force_basic_auth: true
+    status_code: [200, 201]
+  failed_when: false
+  # Note: May fail with 403 if CSRF protection is enabled or if JCasC already loaded on restart
+  when: reload_jcasc | bool
+  register: jcasc_reload_result
+
+- name: Verify agent connection
+  ansible.builtin.uri:
+    url: "http://localhost:{{ jenkins_port }}/computer/{{ agent_name }}/api/json"
+    method: GET
+    user: "{{ jenkins_admin_user }}"
+    password: "{{ jenkins_admin_password }}"
+    force_basic_auth: true
+    return_content: true
+  register: agent_status
+  failed_when: false
+  # Note: May fail with 404 if agent hasn't been registered yet by JCasC
+  when: verify_config | bool
+
+- name: Display Jenkins configuration status
+  ansible.builtin.debug:
+    msg:
+      - "Jenkins Configuration as Code applied!"
+      - "JCasC config: {{ jcasc_config_dest }}"
+      - "Plugins installed: {{ 'Yes' if plugin_install is changed else 'Skipped or already installed' }}"
+      - "Configuration reloaded: {{ 'Yes' if jcasc_reload_result is succeeded else 'Failed' }}"
+      - "Agent {{ agent_name }}: {{ 'Connected' if agent_status is succeeded else 'Check status in Jenkins UI' }}"
+      - ""
+      - "Access Jenkins at: http://{{ ansible_host }}:{{ jenkins_port }}"
+      - "Login: {{ jenkins_admin_user }} / {{ jenkins_admin_password }}"

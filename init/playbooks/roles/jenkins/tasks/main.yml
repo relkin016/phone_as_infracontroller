@@ -1,0 +1,4 @@
+- import_tasks: termux-base.yaml
+- import_tasks: jenkins-controller.yaml
+- import_tasks: jenkins-agent.yaml
+- import_tasks: jenkins-jcasc.yaml

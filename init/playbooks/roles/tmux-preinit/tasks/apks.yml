@@ -1,0 +1,44 @@
+- name: Verify inventory variables exist
+  ansible.builtin.fail:
+    msg: "IP or adb_identify for bangkk are not defined in the hosts file!"
+  when: >
+    hostvars['bangkk']['ansible_host'] is not defined or 
+    hostvars['bangkk']['adb_identify'] is not defined
+
+- name: Connect to device via network (Skipped for USB)
+  ansible.builtin.shell: "adb connect {{ hostvars['bangkk']['adb_identify'] }}"
+  register: adb_connect
+  changed_when: "'already connected' not in adb_connect.stdout"
+  when: "'.' in hostvars['bangkk']['adb_identify']"
+  delegate_to: localhost
+
+- name: Create directory for APKs
+  ansible.builtin.file:
+    path: "/tmp/apks"
+    state: directory
+    mode: '0755'
+  delegate_to: localhost
+  run_once: true
+
+- name: Check and download APK files
+  ansible.builtin.get_url:
+    url: "{{ item }}"
+    dest: "/tmp/apks/{{ item | basename }}"
+  loop: "{{ apk_urls }}"
+  delegate_to: localhost
+
+- name: Install APKs on device
+  ansible.builtin.shell: "adb -s {{ hostvars['bangkk']['adb_identify'] }} install -r -g /tmp/apks/{{ item | basename }}"
+  register: adb_install
+  changed_when: "'Success' in adb_install.stdout"
+  loop: "{{ apk_urls }}"
+  loop_control:
+    label: "{{ item | basename }}"
+  delegate_to: localhost
+
+#- name: Clean up temporary APK files (Optional)
+#  ansible.builtin.file:
+#    path: "/tmp/apks"
+#    state: absent
+#  delegate_to: localhost
+#  run_once: true
