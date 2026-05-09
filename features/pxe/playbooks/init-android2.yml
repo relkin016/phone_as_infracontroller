@@ -1,0 +1,7 @@
+# ВТОРАЯ ЧАСТЬ: Настройка Ansible внутри Termux
+- name: Настройка окружения Ansible на смартфоне
+  hosts: termux
+  gather_facts: no
+  tasks:
+   - name: Install jenkins JOB
+     ansible.builtin.import_tasks: tasks/job.yml

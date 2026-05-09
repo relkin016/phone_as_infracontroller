@@ -1,0 +1,114 @@
+- name: Apply DHCP Lease Script to MikroTik
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  module_defaults:
+    group/community.routeros.api:
+      hostname: "{{ hostvars['router_main']['ansible_host'] }}"
+      username: admin
+      password: "{{ ansible_password }}"
+
+  tasks:
+    - name: Получение MAC адреса
+      ansible.builtin.import_tasks: tasks/get_mac.yml
+
+    # 0. Принудительно загружаем обновленные переменные из Vault
+    - name: Reload vault variables to get fresh pxe_mac
+      ansible.builtin.include_vars:
+        file: /etc/ansible/group_vars/all/vault.yml
+
+    # 1. Читаем настройки DHCP-сервера
+    - name: Fetch DHCP server info from MikroTik
+      community.routeros.api_info:
+        path: ip dhcp-server
+      register: dhcp_info
+
+    # 2. Читаем список пулов
+    - name: Fetch IP Pool info
+      community.routeros.api_info:
+        path: ip pool
+      register: pool_info
+
+    # 3. Читаем уже выданные адреса (чтобы исключить их из поиска)
+    - name: Fetch active DHCP leases
+      community.routeros.api_info:
+        path: ip dhcp-server lease
+      register: leases_info
+
+    # 3.5 Ищем правильный DHCP-сервер (тот, у которого ЕСТЬ пул адресов)
+    - name: Identify valid DHCP server
+      ansible.builtin.set_fact:
+        # Оставляем только те серверы, у которых существует ключ address-pool и он не равен static-only
+        valid_dhcp_servers: "{{ dhcp_info.result | selectattr('address-pool', 'defined') | rejectattr('address-pool', 'equalto', 'static-only') | list }}"
+
+    - name: Fail if no valid DHCP server found
+      ansible.builtin.fail:
+        msg: "Ошибка: На MikroTik не найдено ни одного DHCP-сервера с настроенным пулом адресов!"
+      when: valid_dhcp_servers | length == 0
+
+    - name: Set the target DHCP server
+      ansible.builtin.set_fact:
+        target_dhcp: "{{ valid_dhcp_servers | first }}"
+
+    # 4. Фильтруем данные: находим нужный пул и список занятых IP
+    - name: Extract pool range and active IPs
+      ansible.builtin.set_fact:
+        target_pool: "{{ pool_info.result | selectattr('name', 'equalto', target_dhcp['address-pool']) | first }}"
+        active_ips: "{{ leases_info.result | default([]) | map(attribute='address') | list }}"
+
+    # 5. Высчитываем первый свободный IP через Python-скрипт
+    - name: Calculate first free IP using inline Python
+      ansible.builtin.shell: |
+        python3 -c '
+        import ipaddress
+        # Берем первый диапазон из пула (например "192.168.88.10-192.168.88.254")
+        pool_range = "{{ target_pool.ranges }}".split(",")[0]
+        start_ip_str, end_ip_str = pool_range.split("-")
+        used_ips = {{ active_ips | to_json }}
+        
+        start_ip = int(ipaddress.IPv4Address(start_ip_str.strip()))
+        end_ip = int(ipaddress.IPv4Address(end_ip_str.strip()))
+        
+        for ip_int in range(start_ip, end_ip + 1):
+            ip_str = str(ipaddress.IPv4Address(ip_int))
+            if ip_str not in used_ips:
+                print(ip_str)
+                break
+        '
+      register: calc_ip
+
+    # 6. Сохраняем найденный IP в переменную
+    - name: Save the free IP
+      ansible.builtin.set_fact:
+        free_pxe_ip: "{{ calc_ip.stdout_lines[0] }}"
+
+    - name: Debug - Show the calculated IP
+      ansible.builtin.debug:
+        msg: "Найден свободный IP для PXE-телефона: {{ free_pxe_ip }}"
+
+    # 7. Бронируем найденный IP за MAC-адресом телефона (используя правильный сервер)
+    - name: Create static DHCP lease for PXE Phone
+      community.routeros.api_modify:
+        path: ip dhcp-server lease
+        data:
+          - mac-address: "{{ pxe_mac }}"
+            address: "{{ free_pxe_ip }}"
+            server: "{{ target_dhcp.name }}"
+            comment: "PXE Boot File Server (Phone)"
+
+# TODO EXPORT TO pipeline setup
+#    # 8. Привязываем скрипт
+#    - name: Bind script to DHCP server
+#      community.routeros.api_modify:
+#        path: ip dhcp-server
+#        handle_absent_entries: ignore
+#        handle_entries_content: remove_as_much_as_possible
+#        data:
+#          - name: "{{ target_dhcp.name }}"
+#            interface: "{{ target_dhcp.interface }}"
+#            address-pool: "{{ target_dhcp['address-pool'] }}" # <--- ВОТ СПАСИТЕЛЬНАЯ СТРОКА
+#            lease-script: |
+#              :if ($leaseBound=1 and $leaseServerName="{{ target_dhcp.name }}" and $macAddress="{{ pxe_mac }}") do={
+#                  /tool fetch url="http://{{ free_pxe_ip }}:8080/job/pxe-deploy/build" http-method=post
+#              }
