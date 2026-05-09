@@ -1,0 +1,8 @@
+# ВТОРАЯ ЧАСТЬ: Настройка Ansible внутри Termux
+- name: Setup termux environment
+  hosts: termux
+  gather_facts: no
+  roles:
+#    - ansible TODO uncomment before merge
+    - termux-base
+    - jenkins

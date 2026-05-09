@@ -1,0 +1,27 @@
+- name: Get Termux system prefix
+  shell: echo $PREFIX
+  register: termux_env_prefix
+  changed_when: false
+
+- name: Install system dependencies and build tools
+  raw: pkg install binutils python rust libffi openssl clang make git build-essential python-pip cmake libsodium -y
+
+- name: Get ANDROID_API level
+  shell: getprop ro.build.version.sdk
+  register: android_sdk
+  changed_when: false
+
+- name: Upgrade pip, setuptools, and wheel
+  shell: pip install --upgrade pip setuptools wheel
+
+- name: Install cryptography via pip
+  shell: pip install cryptography
+  environment:
+    LDFLAGS: "-L{{ termux_env_prefix.stdout }}/lib"
+    CPPFLAGS: "-I{{ termux_env_prefix.stdout }}/include"
+    ANDROID_API_LEVEL: "{{ android_sdk.stdout }}"
+    CARGO_BUILD_TARGET: "aarch64-linux-android"
+    RUSTFLAGS: "-C lto=n"
+
+- name: Install Ansible and additional modules
+  shell: pip install ansible pynacl pywinrm[credssp]

@@ -1,0 +1,12 @@
+- name: Install apks
+  hosts: localhost
+  gather_facts: no
+  roles:
+    - tmux-preinit
+  vars:
+    android_device: "{{ hostvars['bangkk']['ansible_host'] }}:5555"
+    apk_urls:
+      - "https://f-droid.org/repo/com.termux_1002.apk"
+      - "https://f-droid.org/repo/com.termux.api_1002.apk"
+      - "https://f-droid.org/repo/com.termux.boot_1000.apk"
+    temp_dir: "/tmp/ansible_apks"
