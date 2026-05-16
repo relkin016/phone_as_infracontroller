@@ -3,7 +3,7 @@
   ansible.builtin.fail:
     msg: "IP or adb_identify for bangkk are not defined in the hosts file!"
   when: >
-    hostvars['bangkk']['ansible_host'] is not defined or 
+    hostvars['bangkk']['ansible_host'] is not defined or
     hostvars['bangkk']['adb_identify'] is not defined
 
 - name: Connect to device via network (Skipped for USB)
@@ -13,7 +13,40 @@
   when: "'.' in hostvars['bangkk']['adb_identify']"
   delegate_to: localhost
 
-- name: Create directory for APKs
+- name: Get list of installed packages on device
+  ansible.builtin.shell: "adb -s {{ hostvars['bangkk']['adb_identify'] }} shell pm list packages"
+  register: installed_packages
+  changed_when: false
+  delegate_to: localhost
+
+- name: Build list of already-installed package names from apk_urls
+  ansible.builtin.set_fact:
+    already_installed: >-
+      {{ apk_urls
+         | map('basename')
+         | map('splitext')
+         | map('first')
+         | select('in', installed_packages.stdout)
+         | list }}
+    apks_to_install: >-
+      {{ apk_urls
+         | selectattr('__class__', 'undefined')
+         | default(apk_urls)
+         | reject('extract', {'__pipe__': 'basename'})
+         | default([]) }}
+
+# Простіший підхід — фільтруємо через loop нижче, тут будуємо лише список
+- name: Resolve which URLs still need installation
+  ansible.builtin.set_fact:
+    apks_needed: >-
+      {{ apk_urls | select('search',
+           (installed_packages.stdout_lines
+            | map('replace','package:','')
+            | list | join('|'))
+         ) | list | symmetric_difference(apk_urls) | list }}
+
+# ── 2. Для потрібних APK — шукаємо локальні файли в /tmp/apks ──────────────
+- name: Create /tmp/apks directory on Ansible host
   ansible.builtin.file:
     path: "/tmp/apks"
     state: directory
@@ -21,25 +54,46 @@
   delegate_to: localhost
   run_once: true
 
-- name: Check and download APK files
+- name: Find existing termux*.apk files in /tmp/apks
+  ansible.builtin.find:
+    paths: "/tmp/apks"
+    patterns: "termux*.apk"
+  register: local_apks
+  delegate_to: localhost
+  run_once: true
+
+- name: Build list of locally available APK basenames
+  ansible.builtin.set_fact:
+    local_apk_names: "{{ local_apks.files | map(attribute='path') | map('basename') | list }}"
+
+# ── 3. Завантажуємо тільки ті, яких нема локально ──────────────────────────
+- name: Download missing APKs (not found locally)
   ansible.builtin.get_url:
     url: "{{ item }}"
     dest: "/tmp/apks/{{ item | basename }}"
-  loop: "{{ apk_urls }}"
+    mode: '0644'
+  loop: "{{ apks_needed }}"
+  loop_control:
+    label: "{{ item | basename }}"
   delegate_to: localhost
+  when: (item | basename) not in local_apk_names
 
-- name: Install APKs on device
-  ansible.builtin.shell: "adb -s {{ hostvars['bangkk']['adb_identify'] }} install -r -g /tmp/apks/{{ item | basename }}"
+# ── 4. Встановлюємо всі потрібні APK (з /tmp/apks) ─────────────────────────
+- name: Install required APKs on device
+  ansible.builtin.shell: >
+    adb -s {{ hostvars['bangkk']['adb_identify'] }} install -r -g
+    /tmp/apks/{{ item | basename }}
   register: adb_install
   changed_when: "'Success' in adb_install.stdout"
-  loop: "{{ apk_urls }}"
+  failed_when: >
+    adb_install.rc != 0 and
+    'INSTALL_FAILED_ALREADY_EXISTS' not in adb_install.stdout
+  loop: "{{ apks_needed }}"
   loop_control:
     label: "{{ item | basename }}"
   delegate_to: localhost
 
-#- name: Clean up temporary APK files (Optional)
-#  ansible.builtin.file:
-#    path: "/tmp/apks"
-#    state: absent
-#  delegate_to: localhost
-#  run_once: true
+- name: Report skipped (already installed) packages
+  ansible.builtin.debug:
+    msg: "Пропущено (вже встановлено): {{ already_installed | join(', ') }}"
+  when: already_installed | length > 0
