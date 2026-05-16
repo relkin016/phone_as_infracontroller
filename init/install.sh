@@ -446,8 +446,6 @@ copy_ssh_key() {
 
     print_info "Прокидуємо SSH ключ через sshpass + ssh-copy-id"
 
-    local ssh_opts="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o IdentitiesOnly=yes"
-
     if sshpass -p "$ssh_pass" \
         ssh-copy-id \
             -i "${SSH_KEY_PATH}.pub" \
