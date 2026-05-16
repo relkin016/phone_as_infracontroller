@@ -1,3 +1,5 @@
+# init/playbooks/roles/tmux-preinit/tasks/tmux-batt.yml
+
 - name: Configure Android permissions and power consumption
   when: hostvars['bangkk']['ansible_host'] is defined
   block:

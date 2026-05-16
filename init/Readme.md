@@ -15,9 +15,9 @@
 Перед розгортанням переконайтеся, що усі умови вище задоволені, та виконайте команди
 ```bash
 # На пристрої з Debian/Ubuntu/LMDE (для роботи з Ansible)
-sudo apt-get update && sudo apt-get install git
-git clone https://github.com/relkin016/pxe-autoinstall-tmux
-cd pxe-autoinstall-tmux/init
+sudo apt-get update && sudo apt-get install git ansible -y
+git clone https://github.com/relkin016/phone_as_infracontroller.git
+cd phone_as_infracontroller/init
 bash install.sh
 ```
 

@@ -1,3 +1,4 @@
+# init/playbooks/roles/tmux-preinit/tasks/apks.yml
 - name: Verify inventory variables exist
   ansible.builtin.fail:
     msg: "IP or adb_identify for bangkk are not defined in the hosts file!"

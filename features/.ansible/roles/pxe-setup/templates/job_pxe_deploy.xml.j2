@@ -1,0 +1,44 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<flow-definition plugin="workflow-job">
+  <description>Розгортання ОС на ПК через PXE. Тригер: RouterOS webhook або вручну.</description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <org.jenkinsci.plugins.gwt.GenericTrigger plugin="generic-webhook-trigger">
+      <spec></spec>
+      <token>{{ gwt_token_pxe }}</token>
+      <!-- Витягуємо MAC ПК з тіла webhook від RouterOS -->
+      <genericVariables>
+        <org.jenkinsci.plugins.gwt.GenericVariable>
+          <key>PC_MAC</key>
+          <value>$.mac</value>
+          <expressionType>JSONPath</expressionType>
+          <defaultValue></defaultValue>
+        </org.jenkinsci.plugins.gwt.GenericVariable>
+      </genericVariables>
+      <printContributedVariables>false</printContributedVariables>
+      <printPostContent>false</printPostContent>
+      <silentResponse>false</silentResponse>
+      <regexpFilterText></regexpFilterText>
+      <regexpFilterExpression></regexpFilterExpression>
+    </org.jenkinsci.plugins.gwt.GenericTrigger>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.BooleanParameterDefinition>
+          <name>DRY_RUN</name>
+          <defaultValue>false</defaultValue>
+          <description>Тест без реального запуску сервісів</description>
+        </hudson.model.BooleanParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>PC_MAC</name>
+          <defaultValue></defaultValue>
+          <description>MAC ПК (передається від RouterOS або вводиться вручну)</description>
+        </hudson.model.StringParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps">
+    <script>{{ lookup('file', termux_home + '/Jenkinsfile.pxe-deploy') | e }}</script>
+    <sandbox>true</sandbox>
+  </definition>
+  <disabled>false</disabled>
+</flow-definition>

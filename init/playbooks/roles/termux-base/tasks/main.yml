@@ -1,3 +1,4 @@
+# init/playbooks/roles/termux-base/tasks/main.yml
 - name: Ensure ~/.termux/boot directory exists
   ansible.builtin.file:
     path: "{{ termux_home }}/.termux/boot"

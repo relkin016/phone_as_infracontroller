@@ -1,0 +1,30 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<flow-definition plugin="workflow-job">
+  <description>Налаштування RouterOS при підключенні телефону до нової мережі</description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <org.jenkinsci.plugins.gwt.GenericTrigger plugin="generic-webhook-trigger">
+      <spec></spec>
+      <token>{{ gwt_token_routeros }}</token>
+      <printContributedVariables>false</printContributedVariables>
+      <printPostContent>false</printPostContent>
+      <silentResponse>false</silentResponse>
+      <regexpFilterText></regexpFilterText>
+      <regexpFilterExpression></regexpFilterExpression>
+    </org.jenkinsci.plugins.gwt.GenericTrigger>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.BooleanParameterDefinition>
+          <name>DRY_RUN</name>
+          <defaultValue>false</defaultValue>
+          <description>Запустити ansible з --check --diff (без реальних змін)</description>
+        </hudson.model.BooleanParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps">
+    <script>{{ lookup('file', termux_home + '/Jenkinsfile.setup-routeros') | e }}</script>
+    <sandbox>true</sandbox>
+  </definition>
+  <disabled>false</disabled>
+</flow-definition>

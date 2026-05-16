@@ -1,8 +1,8 @@
-# ВТОРАЯ ЧАСТЬ: Настройка Ansible внутри Termux
+# init/playbooks/init-android2.yml
 - name: Setup termux environment
   hosts: termux
   gather_facts: no
   roles:
-#    - ansible TODO uncomment before merge
+    - ansible
     - termux-base
     - jenkins

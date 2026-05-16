@@ -1,3 +1,4 @@
+# init/playbooks/roles/ansible/tasks/main.yml
 - name: Get Termux system prefix
   shell: echo $PREFIX
   register: termux_env_prefix

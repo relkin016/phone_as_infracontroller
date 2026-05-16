@@ -1,5 +1,3 @@
-- name: Install termux apk's
-  ansible.builtin.import_tasks: apks.yml
-
-- name: Setup termux battery settings
-  ansible.builtin.import_tasks: tmux-batt.yml
+# init/playbooks/roles/tmux-preinit/tasks/main.yml
+- import_tasks: apks.yml
+- import_tasks: tmux-batt.yml

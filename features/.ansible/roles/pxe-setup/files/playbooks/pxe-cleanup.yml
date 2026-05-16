@@ -1,0 +1,90 @@
+---
+# playbooks/pxe-cleanup.yml
+# Запускається у post { always } блоці Jenkinsfile.pxe-deploy
+# Зупиняє сервіси і прибирає налаштування RouterOS
+
+- name: Зупинити PXE сервіси на телефоні
+  hosts: localhost
+  gather_facts: false
+
+  tasks:
+
+    - name: Зупинити tftpd
+      ansible.builtin.shell: pkill -f tftpd || true
+
+    - name: Зупинити nginx
+      ansible.builtin.shell: pkill -f nginx || true
+
+    - name: Видалити тимчасові файли
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /tmp/pxe_target_ip
+
+- name: Прибрати налаштування RouterOS
+  hosts: routeros
+  gather_facts: false
+
+  module_defaults:
+    group/community.routeros.api:
+      hostname: "{{ hostvars['router_main']['ansible_host'] }}"
+      username: "{{ routeros_user }}"
+      password: "{{ routeros_password }}"
+
+  vars:
+    pc_mac: "{{ lookup('env', 'PC_MAC') }}"
+
+  tasks:
+
+    # ── 1. Видалити DNAT правило ──────────────────────────────────────────────
+    - name: Видалити DNAT правило порту 69
+      community.routeros.api:
+        path: ip firewall nat
+        cmd: remove
+        query:
+          - comment: pxe-tftp-dnat
+      ignore_errors: yes
+
+    # ── 2. Видалити MAC ПК з DHCP leases ─────────────────────────────────────
+    - name: Отримати список leases
+      community.routeros.api_info:
+        path: ip dhcp-server lease
+      register: all_leases
+      when: pc_mac != ""
+
+    - name: Видалити lease для MAC ПК
+      community.routeros.api:
+        path: ip dhcp-server lease
+        cmd: remove
+        query:
+          - mac-address: "{{ pc_mac | upper }}"
+      when:
+        - pc_mac != ""
+        - all_leases.result | selectattr('mac-address', 'equalto', pc_mac | upper) | list | length > 0
+      ignore_errors: yes
+
+    # ── 3. Очистити lease-script з DHCP сервера ───────────────────────────────
+    - name: Отримати інформацію про DHCP сервер
+      community.routeros.api_info:
+        path: ip dhcp-server
+      register: dhcp_servers
+
+    - name: Визначити цільовий DHCP сервер
+      ansible.builtin.set_fact:
+        target_dhcp: >-
+          {{ dhcp_servers.result
+             | selectattr('address-pool', 'defined')
+             | rejectattr('address-pool', 'equalto', 'static-only')
+             | first }}
+
+    - name: Видалити lease-script з DHCP сервера
+      community.routeros.api_modify:
+        path: ip dhcp-server
+        handle_absent_entries: ignore
+        handle_entries_content: remove_as_much_as_possible
+        data:
+          - name: "{{ target_dhcp.name }}"
+            interface: "{{ target_dhcp.interface }}"
+            address-pool: "{{ target_dhcp['address-pool'] }}"
+            lease-script: ""

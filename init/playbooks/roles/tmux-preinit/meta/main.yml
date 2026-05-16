@@ -1,3 +1,4 @@
+# init/playbooks/roles/tmux-preinit/meta/main.yml
 galaxy_info:
   author: Roman Yolkin
   description: Install termux on android device

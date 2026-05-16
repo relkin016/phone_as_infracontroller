@@ -1,0 +1,119 @@
+---
+# roles/jenkins_pxe_job/tasks/main.yml
+# Створює обидві Jenkins job через API
+# Виконується зовнішнім Ansible один раз
+
+# ── 1. Чекаємо Jenkins ────────────────────────────────────────────────────────
+- name: Дочекатись Jenkins API
+  uri:
+    url: "{{ jenkins_url }}/api/json"
+    user: "{{ jenkins_user }}"
+    password: "{{ jenkins_password }}"
+    force_basic_auth: yes
+    status_code: 200
+  retries: 12
+  delay: 10
+  register: jenkins_ready
+
+# ── 2. Отримуємо crumb (CSRF захист) ─────────────────────────────────────────
+- name: Отримати Jenkins crumb
+  uri:
+    url: "{{ jenkins_url }}/crumbIssuer/api/json"
+    user: "{{ jenkins_user }}"
+    password: "{{ jenkins_password }}"
+    force_basic_auth: yes
+  register: jenkins_crumb
+
+- name: Зберегти crumb
+  set_fact:
+    crumb_value: "{{ jenkins_crumb.json.crumb }}"
+    crumb_field: "{{ jenkins_crumb.json.crumbRequestField }}"
+
+# ── 3. Копіюємо Jenkinsfile-и на телефон ─────────────────────────────────────
+- name: Копіювати Jenkinsfile.setup-routeros
+  copy:
+    src: "{{ playbook_dir }}/../Jenkinsfile.setup-routeros"
+    dest: "{{ termux_home }}/Jenkinsfile.setup-routeros"
+    mode: '0644'
+
+- name: Копіювати Jenkinsfile.pxe-deploy
+  copy:
+    src: "{{ playbook_dir }}/../Jenkinsfile.pxe-deploy"
+    dest: "{{ termux_home }}/Jenkinsfile.pxe-deploy"
+    mode: '0644'
+
+# ── 4. Створюємо job "routeros-setup" ────────────────────────────────────────
+- name: Перевірити чи існує job routeros-setup
+  uri:
+    url: "{{ jenkins_url }}/job/{{ job_setup_routeros_name }}/api/json"
+    user: "{{ jenkins_user }}"
+    password: "{{ jenkins_password }}"
+    force_basic_auth: yes
+    status_code: [200, 404]
+  register: job_routeros_check
+
+- name: Створити job routeros-setup
+  uri:
+    url: "{{ jenkins_url }}/createItem?name={{ job_setup_routeros_name }}"
+    method: POST
+    user: "{{ jenkins_user }}"
+    password: "{{ jenkins_password }}"
+    force_basic_auth: yes
+    headers:
+      Content-Type: "application/xml"
+      "{{ crumb_field }}": "{{ crumb_value }}"
+    body: "{{ lookup('template', 'job_routeros_setup.xml.j2') }}"
+    status_code: 200
+  when: job_routeros_check.status == 404
+
+- name: Оновити job routeros-setup (якщо вже існує)
+  uri:
+    url: "{{ jenkins_url }}/job/{{ job_setup_routeros_name }}/config.xml"
+    method: POST
+    user: "{{ jenkins_user }}"
+    password: "{{ jenkins_password }}"
+    force_basic_auth: yes
+    headers:
+      Content-Type: "application/xml"
+      "{{ crumb_field }}": "{{ crumb_value }}"
+    body: "{{ lookup('template', 'job_routeros_setup.xml.j2') }}"
+    status_code: 200
+  when: job_routeros_check.status == 200
+
+# ── 5. Створюємо job "pxe-deploy" ────────────────────────────────────────────
+- name: Перевірити чи існує job pxe-deploy
+  uri:
+    url: "{{ jenkins_url }}/job/{{ job_pxe_deploy_name }}/api/json"
+    user: "{{ jenkins_user }}"
+    password: "{{ jenkins_password }}"
+    force_basic_auth: yes
+    status_code: [200, 404]
+  register: job_pxe_check
+
+- name: Створити job pxe-deploy
+  uri:
+    url: "{{ jenkins_url }}/createItem?name={{ job_pxe_deploy_name }}"
+    method: POST
+    user: "{{ jenkins_user }}"
+    password: "{{ jenkins_password }}"
+    force_basic_auth: yes
+    headers:
+      Content-Type: "application/xml"
+      "{{ crumb_field }}": "{{ crumb_value }}"
+    body: "{{ lookup('template', 'job_pxe_deploy.xml.j2') }}"
+    status_code: 200
+  when: job_pxe_check.status == 404
+
+- name: Оновити job pxe-deploy (якщо вже існує)
+  uri:
+    url: "{{ jenkins_url }}/job/{{ job_pxe_deploy_name }}/config.xml"
+    method: POST
+    user: "{{ jenkins_user }}"
+    password: "{{ jenkins_password }}"
+    force_basic_auth: yes
+    headers:
+      Content-Type: "application/xml"
+      "{{ crumb_field }}": "{{ crumb_value }}"
+    body: "{{ lookup('template', 'job_pxe_deploy.xml.j2') }}"
+    status_code: 200
+  when: job_pxe_check.status == 200
