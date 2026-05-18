@@ -1,0 +1,195 @@
+pipeline {
+    agent any
+
+    environment {
+        FEATURE_DIR = '.'
+        VAULT_PASS  = '../init/.vault_pass'
+        VAULT_FILE  = '../init/group_vars/termux/vault.yaml'
+        INVENTORY   = './inventory.ini'
+        PLAYBOOK    = './playbook.yml'
+        MAKEFILE    = './Makefile'
+        DEFAULT_SSH_PASS = '1111'
+    }
+
+    parameters {
+        string(
+                name: 'ANSIBLE_USER',
+                defaultValue: 'ubuntu',
+                description: 'SSH користувач на цільових хостах'
+        )
+        string(
+                name: 'SUBNET',
+                defaultValue: '',
+                description: 'Підмережа для сканування (напр. 192.168.1.0/24). Порожньо = автовизначення'
+        )
+        booleanParam(
+                name: 'DRY_RUN',
+                defaultValue: false,
+                description: 'ansible --check --diff без реальних змін'
+        )
+    }
+
+    stages {
+
+        stage('1. Install requirements') {
+            steps {
+                sh '''
+                    echo "=== make install ==="
+                    cd ${FEATURE_DIR}
+                    make install
+                '''
+            }
+        }
+
+        stage('2. nmap scan') {
+            steps {
+                sh '''
+                    echo "=== Визначення підмережі ==="
+                    if [ -n "$SUBNET" ]; then
+                        TARGET_SUBNET="$SUBNET"
+                    else
+                        # Автовизначення з дефолтного маршруту
+                        GW=$(ip route show default | awk '/default/{print $3; exit}')
+                        TARGET_SUBNET=$(echo "$GW" | sed 's/\\.[0-9]*$/.0\\/24/')
+                        echo "Автовизначено: $TARGET_SUBNET"
+                    fi
+
+                    echo "=== nmap сканування $TARGET_SUBNET ==="
+                    # Шукаємо хости з відкритим SSH (порт 22)
+                    # -sV визначає версію сервісу щоб відфільтрувати Ubuntu
+                    nmap -p 22 --open -sV \
+                         --script banner \
+                         -oG /tmp/nmap_scan.txt \
+                         "$TARGET_SUBNET"
+
+                    echo "=== Результат ==="
+                    cat /tmp/nmap_scan.txt
+                '''
+            }
+        }
+
+         stage('3. Generate inventory') {
+             steps {
+                 sh '''
+                     python3 << 'PYEOF'
+         import re, os, subprocess
+
+         # Перевіряємо vault
+         vault_pass = None
+         try:
+             result = subprocess.run(
+                 ['ansible-vault', 'view',
+                  os.environ['VAULT_FILE'],
+                  '--vault-password-file', os.environ['VAULT_PASS']],
+                 capture_output=True, text=True
+             )
+             for line in result.stdout.splitlines():
+                 if line.startswith('ansible_password:'):
+                     vault_pass = line.split(':', 1)[1].strip()
+                     break
+         except Exception:
+             pass
+
+         if vault_pass:
+             print("ansible_password знайдено у Vault")
+             pass_line = f'ansible_ssh_pass={vault_pass}\n'
+             become_line = f'ansible_become_pass={vault_pass}\n'
+         else:
+             print(f"ansible_password не у Vault — використовуємо DEFAULT_SSH_PASS")
+             default = os.environ['DEFAULT_SSH_PASS']
+             pass_line = f'ansible_ssh_pass={default}\n'
+             become_line = f'ansible_become_pass={default}\n'
+
+         with open('/tmp/nmap_scan.txt') as f:
+             content = f.read()
+
+         hosts = []
+         current_ip = None
+         for line in content.splitlines():
+             ip_match = re.search(r'Host: (\d+\.\d+\.\d+\.\d+)', line)
+             if ip_match:
+                 current_ip = ip_match.group(1)
+             if current_ip and ('Ubuntu' in line or 'ubuntu' in line):
+                 if current_ip not in hosts:
+                     hosts.append(current_ip)
+
+         with open('./inventory.ini', 'w') as f:
+             f.write('[scaned]\n')
+             for ip in hosts:
+                 f.write(f'{ip}\n')
+             f.write('\n')
+             f.write('[scaned:vars]\n')
+             f.write(f'ansible_user={os.environ["ANSIBLE_USER"]}\n')
+             f.write(pass_line)
+             f.write('ansible_become=yes\n')
+             f.write('ansible_become_method=sudo\n')
+             f.write(become_line)
+             f.write('ansible_ssh_common_args=-o StrictHostKeyChecking=no\n')
+
+         print(f"Знайдено {len(hosts)} Ubuntu хостів:")
+         for h in hosts:
+             print(f"  {h}")
+         if not hosts:
+             print("УВАГА: Ubuntu хостів не знайдено!")
+             exit(1)
+         PYEOF
+                     echo "=== inventory.ini (без пароля) ==="
+                     grep -v 'pass' ./inventory.ini
+                 '''
+             }
+         }
+
+        stage('4. Copy SSH keys') {
+            steps {
+                sh '''
+                    echo "=== Отримуємо ssh_pass з Vault ==="
+                    SSH_PASS=$(ansible-vault view ${VAULT_FILE} \
+                        --vault-password-file ${VAULT_PASS} \
+                        | awk '/^ssh_pass:/{print $2}')
+
+                    echo "=== Прокидуємо SSH ключ на знайдені хости ==="
+                    while IFS= read -r ip; do
+                        # Пропускаємо рядки що не є IP
+                        [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || continue
+
+                        echo "  → $ip"
+                        sshpass -p "$SSH_PASS" \
+                            ssh-copy-id \
+                                -o StrictHostKeyChecking=no \
+                                -o IdentitiesOnly=yes \
+                                -i ~/.ssh/id_ed25519.pub \
+                                "${ANSIBLE_USER}@${ip}" \
+                        && echo "    ✓ ключ скопійовано" \
+                        || echo "    ✗ помилка (можливо ключ вже є)"
+                    done < <(grep -E '^\d+\.\d+\.\d+\.\d+' ${FEATURE_DIR}/inventory.ini)
+                '''
+            }
+        }
+
+        stage('5. Deploy playbook') {
+            steps {
+                script {
+                    def checkFlag = params.DRY_RUN ? '--check --diff' : ''
+                    ansiblePlaybook(
+                            playbook: "${env.FEATURE_DIR}/playbook.yml",
+                            inventory: "${env.FEATURE_DIR}/inventory.ini",
+                            colorized: true,
+                            extras: "--vault-password-file ${env.VAULT_PASS} ${checkFlag}"
+                    )
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            sh 'rm -f /tmp/nmap_scan.txt || true'
+        }
+        success {
+            echo "Налаштування завершено успішно."
+        }
+        failure {
+            echo "Помилка. Перевірте логи вище."
+        }
+    }
+}
