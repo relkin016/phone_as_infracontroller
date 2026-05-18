@@ -7,7 +7,7 @@
     # ── devsec.ssh_hardening ──────────────────────────────────────────────────
     ssh_permit_root_login: "no"
     ssh_password_authentication: "no"
-    ssh_port: [22]                  # залишаємо 22 — змінити за потреби
+    ssh_port: [22]
     ssh_max_auth_retries: 3
     ssh_client_alive_interval: 300
     ssh_client_alive_count_max: 2
