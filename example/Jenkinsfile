@@ -1,6 +1,17 @@
 pipeline {
     agent any
 
+    triggers {
+        GenericTrigger(
+            genericVariables: [
+                [key: 'ANSIBLE_USER', value: '$.ansible_user', defaultValue: 'ubuntu']
+            ],
+            token: 'example',
+            printContributedVariables: false,
+            printPostContent: false
+        )
+    }
+
     environment {
         FEATURE_DIR = '.'
         VAULT_PASS  = '../init/.vault_pass'
