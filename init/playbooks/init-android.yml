@@ -5,7 +5,7 @@
   roles:
     - tmux-preinit
   vars:
-    android_device: "{{ hostvars['bangkk']['ansible_host'] }}:5555"
+    android_device: "{{ hostvars['bangkk']['adb_identify'] }}"
     apk_urls:
       - "https://f-droid.org/repo/com.termux_1002.apk"
       - "https://f-droid.org/repo/com.termux.api_1002.apk"
