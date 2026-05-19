@@ -49,7 +49,7 @@
   when: (item | basename) not in local_apk_names
 
 # ── 4. Встановлюємо всі APK з /tmp/apks ─────────────────────────────────────
-- name: Find all APKs in {{ temp_dir }} to install
+- name: "Find all APKs in {{ temp_dir }} to install"
   ansible.builtin.find:
     paths: "{{ temp_dir }}"
     patterns: "*.apk"

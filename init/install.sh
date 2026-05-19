@@ -255,7 +255,7 @@ get_termux_user() {
         read -r -p "Введіть ТІЛЬКИ цифри з імені u0_a[___]: " USER_NUM < /dev/tty
         [[ "$USER_NUM" =~ ^[0-9]+$ ]] || { print_error "Тільки цифри!"; continue; }
         TERMUX_USER="u0_a${USER_NUM}"
-        read -r -p "Користувач: '$TERMUX_USER' — вірно? (y/n): " ok < /dev/tty
+        read -r -p "Користувач: '$TERMUX_USER' — правильно? (y/n): " ok < /dev/tty
         [[ "$ok" =~ ^[Yy]$ ]] && break
     done
 
