@@ -40,7 +40,7 @@
 - name: Download missing APKs (not found in /tmp/apks)
   ansible.builtin.get_url:
     url: "{{ item }}"
-    dest: "{{ temp_dir | item | basename }}"
+    dest: "{{ temp_dir }}/{{ item | basename }}"
     mode: '0644'
   loop: "{{ apk_urls }}"
   loop_control:
