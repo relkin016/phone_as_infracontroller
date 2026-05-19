@@ -1,4 +1,4 @@
-# features/setup-ubuntu-server-nodes/Makefile
+# example/Makefile
 
 ROLES_PATH   := roles
 REQUIREMENTS := requirements.yml
