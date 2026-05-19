@@ -17,7 +17,7 @@
 # ── 1. Підготовка директорії ────────────────────────────────────────────────
 - name: Create /tmp/apks directory on Ansible host
   ansible.builtin.file:
-    path: "/tmp/apks"
+    path: {{ temp_dir }}
     state: directory
     mode: '0755'
   delegate_to: localhost
@@ -26,7 +26,7 @@
 # ── 2. Шукаємо локальні APK файли ───────────────────────────────────────────
 - name: Find existing *termux*.apk files in /tmp/apks
   ansible.builtin.find:
-    paths: "/tmp/apks"
+    paths: {{ temp_dir }}
     patterns: "*termux*.apk"
   register: local_apks
   delegate_to: localhost
@@ -40,7 +40,7 @@
 - name: Download missing APKs (not found in /tmp/apks)
   ansible.builtin.get_url:
     url: "{{ item }}"
-    dest: "/tmp/apks/{{ item | basename }}"
+    dest: "{{ temp_dir | item | basename }}"
     mode: '0644'
   loop: "{{ apk_urls }}"
   loop_control:
@@ -51,7 +51,7 @@
 # ── 4. Встановлюємо всі APK з /tmp/apks ─────────────────────────────────────
 - name: Find all APKs in /tmp/apks to install
   ansible.builtin.find:
-    paths: "/tmp/apks"
+    paths: {{ temp_dir }}
     patterns: "*.apk"
   register: apks_to_install
   delegate_to: localhost
