@@ -9,6 +9,7 @@
   ansible.builtin.shell: |
     cat > {{ termux_home }}/.termux/boot/start-sshd.sh << 'EOF'
     #!/data/data/com.termux/files/usr/bin/bash
+    termux-wake-lock
     sshd
     EOF
     chmod 0755 {{ termux_home }}/.termux/boot/start-sshd.sh
