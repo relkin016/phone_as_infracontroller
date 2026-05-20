@@ -24,8 +24,12 @@
   changed_when: false
 
 - name: Update package list
-  ansible.builtin.shell: "pkg update -y"
-  changed_when: false
+  ansible.builtin.shell: |
+    pkg update -y || \
+    (termux-change-repo --mirror https://packages-cf.termux.dev/apt/termux-main && \
+     pkg update -y)
+  register: pkg_update
+  changed_when: "'upgraded' in pkg_update.stdout"
 
 - name: Install core Termux packages
   ansible.builtin.command: "{{ termux_bin }}/pkg install -y {{ item }}"
