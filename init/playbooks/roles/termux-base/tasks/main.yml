@@ -7,7 +7,7 @@
 
 - name: Create sshd autostart script for Termux Boot
   ansible.builtin.shell: |
-    cat > {{ termux_home }}/.termux/boot/start-sshd.sh << 'EOF'
+    cat > {{ termux_home }}/.termux/boot/.sh << 'EOF'
     #!/data/data/com.termux/files/usr/bin/bash
     termux-wake-lock
     sshd
