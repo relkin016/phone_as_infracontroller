@@ -25,7 +25,7 @@ ANSIBLE_DIR="$HOME/ansible"
 # Генеровані файли — тепер у $ANSIBLE_DIR
 ANSIBLE_CFG="$ANSIBLE_DIR/ansible.cfg"
 HOSTS_FILE="$ANSIBLE_DIR/hosts.yaml"
-GROUP_VARS_DIR="$ANSIBLE_DIR/group_vars/termux"
+GROUP_VARS_DIR="$ANSIBLE_DIR/group_vars/all"
 VAULT_FILE="$GROUP_VARS_DIR/vault.yaml"
 VARS_FILE="$GROUP_VARS_DIR/vars.yaml"
 VAULT_PASS_FILE="$ANSIBLE_DIR/.vault_pass"
