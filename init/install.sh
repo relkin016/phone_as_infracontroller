@@ -573,23 +573,6 @@ SCRIPT_EOF
     print_success "post-install.sh згенеровано: $POST_INSTALL_SCRIPT"
 }
 
-# ─── ОНОВЛЕННЯ .gitignore ─────────────────────────────────────────────────────
-update_gitignore() {
-    local gitignore
-    gitignore="$(dirname "$SCRIPT_DIR")/.gitignore"
-    # Видаляємо старі записи що вказували на репо
-    for old_entry in \
-        "init/ansible.cfg" \
-        "init/hosts.yaml" \
-        "init/group_vars/" \
-        "init/.vault_pass" \
-        "init/post-install.sh"; do
-        sed -i "\|^${old_entry}$|d" "$gitignore" 2>/dev/null || true
-    done
-    # ANSIBLE_DIR поза репо — нічого не треба ігнорувати
-    print_success ".gitignore оновлено (ansible файли тепер поза репо)"
-}
-
 # ═════════════════════════════════════════════════════════════════════════════
 # MAIN
 # ═════════════════════════════════════════════════════════════════════════════
