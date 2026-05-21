@@ -7,10 +7,10 @@
 
 - name: Copy ansible vault file
   ansible.builtin.copy:
-    src: "~/ansible/group_vars/all/vault.yml"
+    src: "{{ lookup('env', 'HOME') }}/ansible/group_vars/all/vault.yml"
     dest: "{{ termux_home }}/ansible/group_vars/all/vault.yml"
 
 - name: Copy ansible vault_pass file
   ansible.builtin.copy:
-    src: "~/ansible/.vault_pass"
+    src: "{{ lookup('env', 'HOME') }}/ansible/.vault_pass"
     dest: "{{ termux_home }}/ansible/.vault_pass"
