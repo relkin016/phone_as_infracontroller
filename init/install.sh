@@ -25,9 +25,10 @@ ANSIBLE_DIR="$HOME/ansible"
 # Генеровані файли — тепер у $ANSIBLE_DIR
 ANSIBLE_CFG="$ANSIBLE_DIR/ansible.cfg"
 HOSTS_FILE="$ANSIBLE_DIR/hosts.yaml"
-GROUP_VARS_DIR="$ANSIBLE_DIR/group_vars/all"
+GROUP_VARS_DIR="$ANSIBLE_DIR/group_vars/all/"
+GROUP_VARS_DIR_TERMUX="$ANSIBLE_DIR/group_vars/termux"
 VAULT_FILE="$GROUP_VARS_DIR/vault.yaml"
-VARS_FILE="$GROUP_VARS_DIR/vars.yaml"
+VARS_FILE="$GROUP_VARS_DIR_TERMUX/vars.yaml"
 VAULT_PASS_FILE="$ANSIBLE_DIR/.vault_pass"
 POST_INSTALL_SCRIPT="$ANSIBLE_DIR/post-install.sh"
 
@@ -58,6 +59,7 @@ init_ansible_dir() {
         print_success "Створено директорію Ansible: $ANSIBLE_DIR"
     fi
     mkdir -p "$GROUP_VARS_DIR"
+    mkdir -p "$GROUP_VARS_DIR_TERMUX"
 }
 
 # ─── ПЕРЕВІРКА ОС ─────────────────────────────────────────────────────────────
@@ -275,7 +277,7 @@ get_termux_user() {
 setup_vault() {
     print_step "Паролі та Ansible Vault"
 
-    mkdir -p "$GROUP_VARS_DIR"
+    mkdir -p "$GROUP_VARS_DIR_TERMUX"
 
     if [ -f "$VAULT_FILE" ] && [ -f "$VAULT_PASS_FILE" ]; then
         if ansible-vault view "$VAULT_FILE" \
@@ -349,7 +351,7 @@ EOF
 
 # ─── ГЕНЕРАЦІЯ hosts.yaml + group_vars ────────────────────────────────────────
 generate_hosts() {
-    mkdir -p "$GROUP_VARS_DIR"
+    mkdir -p "$GROUP_VARS_DIR_TERMUX"
 
     cat > "$VARS_FILE" << EOF
 ---
@@ -637,7 +639,7 @@ main() {
     read -r -p "Запустити Етап 1 — init-android.yml (Termux preinit через ADB)? (Y/n): " \
         run1 < /dev/tty
     if [[ "${run1:-Y}" =~ ^[Yy]$ ]]; then
-        mkdir -p "$GROUP_VARS_DIR"
+        mkdir -p "$GROUP_VARS_DIR_TERMUX"
         cat > "$VARS_FILE" << EOF
 ansible_remote_tmp: /data/data/com.termux/files/home/.ansible/tmp
 ssh_public_key_path: ${SSH_KEY_PATH}.pub
