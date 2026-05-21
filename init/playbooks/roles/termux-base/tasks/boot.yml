@@ -1,4 +1,5 @@
 # init/playbooks/roles/termux-base/tasks/boot.yml
+
 - name: Ensure ~/.termux/boot directory exists
   ansible.builtin.file:
     path: "{{ termux_home }}/.termux/boot"
@@ -6,13 +7,10 @@
     mode: '0755'
 
 - name: Create sshd autostart script for Termux Boot
-  ansible.builtin.shell: |
-    cat > {{ termux_home }}/.termux/boot/.sh << 'EOF'
-    #!/data/data/com.termux/files/usr/bin/bash
-    termux-wake-lock
-    sshd
-    EOF
-    chmod 0755 {{ termux_home }}/.termux/boot/start-sshd.sh
-  args:
-    executable: /data/data/com.termux/files/usr/bin/bash
-    creates: "{{ termux_home }}/.termux/boot/start-sshd.sh"
+  ansible.builtin.copy:
+    dest: "{{ termux_home }}/.termux/boot/start-sshd.sh"
+    content: |
+      #!/data/data/com.termux/files/usr/bin/bash
+      termux-wake-lock
+      sshd
+    mode: '0755'
