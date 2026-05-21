@@ -18,16 +18,20 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLAYBOOKS_DIR="$SCRIPT_DIR/playbooks"
 ROLES_PATH="$PLAYBOOKS_DIR/roles"
 SSH_PORT=8022
-# Генеровані файли (не комітяться у git)
-ANSIBLE_CFG="$SCRIPT_DIR/ansible.cfg"
-HOSTS_FILE="$SCRIPT_DIR/hosts.yaml"
-GROUP_VARS_DIR="$SCRIPT_DIR/group_vars/termux"
+
+# ── Глобальна директорія Ansible (поза репо) ──────────────────────────────────
+ANSIBLE_DIR="$HOME/ansible"
+
+# Генеровані файли — тепер у $ANSIBLE_DIR
+ANSIBLE_CFG="$ANSIBLE_DIR/ansible.cfg"
+HOSTS_FILE="$ANSIBLE_DIR/hosts.yaml"
+GROUP_VARS_DIR="$ANSIBLE_DIR/group_vars/termux"
 VAULT_FILE="$GROUP_VARS_DIR/vault.yaml"
 VARS_FILE="$GROUP_VARS_DIR/vars.yaml"
-VAULT_PASS_FILE="$SCRIPT_DIR/.vault_pass"
-POST_INSTALL_SCRIPT="$SCRIPT_DIR/post-install.sh"
+VAULT_PASS_FILE="$ANSIBLE_DIR/.vault_pass"
+POST_INSTALL_SCRIPT="$ANSIBLE_DIR/post-install.sh"
 
-# Плейбуки
+# Плейбуки (залишаються у репо — тільки читаємо)
 PLAYBOOK_STAGE1="$PLAYBOOKS_DIR/init-android.yml"
 PLAYBOOK_STAGE2="$PLAYBOOKS_DIR/init-android2.yml"
 
@@ -45,6 +49,15 @@ display_banner() {
 ╚════════════════════════════════════════════════════════════╝
 EOF
     echo -e "${NC}"
+}
+
+# ─── ІНІЦІАЛІЗАЦІЯ ANSIBLE_DIR ────────────────────────────────────────────────
+init_ansible_dir() {
+    if [ ! -d "$ANSIBLE_DIR" ]; then
+        mkdir -p "$ANSIBLE_DIR"
+        print_success "Створено директорію Ansible: $ANSIBLE_DIR"
+    fi
+    mkdir -p "$GROUP_VARS_DIR"
 }
 
 # ─── ПЕРЕВІРКА ОС ─────────────────────────────────────────────────────────────
@@ -135,7 +148,6 @@ install_tools() {
 }
 
 # ─── ПЕРЕВІРКА ГОТОВНОСТІ ДО ЕТАПУ 2 ─────────────────────────────────────────
-# Повертає 0 якщо вже є згенерований post-install.sh і конфіг актуальний
 stage2_ready() {
     [ -f "$POST_INSTALL_SCRIPT" ] \
         && [ -f "$HOSTS_FILE" ] \
@@ -145,7 +157,6 @@ stage2_ready() {
 
 # ─── ВИКОНАННЯ ЕТАПУ 2 ────────────────────────────────────────────────────────
 run_stage2() {
-    # Запитуємо user якщо ще не знаємо
     if [[ -z "${TERMUX_USER:-}" ]]; then
         get_termux_user
     else
@@ -156,7 +167,7 @@ run_stage2() {
 
     generate_hosts
     copy_ssh_key
-    generate_post_install   # перегенеровуємо з актуальним TERMUX_USER
+    generate_post_install
     bash "$POST_INSTALL_SCRIPT"
 }
 
@@ -204,7 +215,6 @@ get_adb_connection() {
         print_warning "USB-пристроїв не знайдено"
     fi
 
-    # Fallback — Wi-Fi ADB
     if [ -z "$ADB_ID" ]; then
         print_warning "Переходимо до Wi-Fi ADB..."
         while [ -z "$ADB_ID" ]; do
@@ -232,7 +242,6 @@ get_adb_connection() {
         done
     fi
 
-    # Отримуємо IP при USB-підключенні
     if [ -n "$ADB_ID" ] && [ -z "$PHONE_IP" ]; then
         PHONE_IP=$(adb -s "$ADB_ID" shell ip route 2>/dev/null \
             | awk '/wlan/ {print $9; exit}' | tr -d '[:space:]') || true
@@ -268,7 +277,6 @@ setup_vault() {
 
     mkdir -p "$GROUP_VARS_DIR"
 
-    # Ідемпотентність
     if [ -f "$VAULT_FILE" ] && [ -f "$VAULT_PASS_FILE" ]; then
         if ansible-vault view "$VAULT_FILE" \
                 --vault-password-file "$VAULT_PASS_FILE" >/dev/null 2>&1; then
@@ -278,14 +286,12 @@ setup_vault() {
         fi
     fi
 
-    # SSH пароль для Termux
     while true; do
         read -r -s -p "SSH-пароль Termux: " SSH_PASS < /dev/tty
         echo; [ -n "$SSH_PASS" ] && break
         print_error "Не може бути порожнім"
     done
 
-    # Jenkins admin пароль
     while true; do
         read -r -s -p "Jenkins admin пароль [Enter = 'admin']: " JENKINS_PASS < /dev/tty
         echo; JENKINS_PASS=${JENKINS_PASS:-admin}
@@ -295,7 +301,6 @@ setup_vault() {
         print_error "Паролі не збігаються"
     done
 
-    # Vault master пароль
     while true; do
         read -r -s -p "Майстер-пароль Vault: " VAULT_PASS < /dev/tty
         echo
@@ -305,7 +310,6 @@ setup_vault() {
         print_error "Паролі не збігаються"
     done
 
-    # Зберігаємо — тільки після вводу всіх паролів
     echo "$VAULT_PASS" > "$VAULT_PASS_FILE"
     chmod 600 "$VAULT_PASS_FILE"
 
@@ -315,18 +319,17 @@ ssh_pass: $SSH_PASS
 jenkins_admin_password: $JENKINS_PASS
 VAULT_EOF
 
-     # Якщо файл вже був зашифрований — розшифровуємо перед повторним шифруванням
-     if ansible-vault view "$VAULT_FILE" \
-             --vault-password-file "$VAULT_PASS_FILE" >/dev/null 2>&1; then
-         ansible-vault decrypt "$VAULT_FILE" \
-             --vault-password-file "$VAULT_PASS_FILE" > /dev/null
-     fi
+    if ansible-vault view "$VAULT_FILE" \
+            --vault-password-file "$VAULT_PASS_FILE" >/dev/null 2>&1; then
+        ansible-vault decrypt "$VAULT_FILE" \
+            --vault-password-file "$VAULT_PASS_FILE" > /dev/null
+    fi
 
-     ansible-vault encrypt "$VAULT_FILE" \
-         --vault-password-file "$VAULT_PASS_FILE" \
-         --encrypt-vault-id default > /dev/null
-     print_success "Vault зашифровано: $VAULT_FILE"
-     }
+    ansible-vault encrypt "$VAULT_FILE" \
+        --vault-password-file "$VAULT_PASS_FILE" \
+        --encrypt-vault-id default > /dev/null
+    print_success "Vault зашифровано: $VAULT_FILE"
+}
 
 # ─── ГЕНЕРАЦІЯ ansible.cfg ────────────────────────────────────────────────────
 generate_ansible_cfg() {
@@ -348,21 +351,16 @@ EOF
 generate_hosts() {
     mkdir -p "$GROUP_VARS_DIR"
 
-    # vars.yaml — незашифровані змінні для termux-хостів
     cat > "$VARS_FILE" << EOF
 ---
 ansible_remote_tmp: /data/data/com.termux/files/home/.ansible/tmp
 ssh_public_key_path: ${SSH_KEY_PATH}.pub
-# Termux-specific variables
-# These apply to all hosts in the termux_controller and termux_agents groups
 
-# Termux paths
 termux_prefix: /data/data/com.termux/files
 termux_home: /data/data/com.termux/files/home
 termux_usr: /data/data/com.termux/files/usr
 termux_bin: /data/data/com.termux/files/usr/bin
 
-# Jenkins configuration
 jenkins_version: 2.555.1
 jenkins_port: 8080
 jenkins_home: "{{ termux_home }}/.jenkins"
@@ -371,25 +369,20 @@ java_bin: "{{ termux_bin }}/java"
 jenkins_admin_user: admin
 jenkins_admin_password: "{{ lookup('env', 'JENKINS_ADMIN_PASSWORD') | default('admin', true) }}"
 
-# Agent configuration
 jenkins_agent_home: "{{ termux_home }}/jenkins-agent"
 jenkins_agent_user: "{{ ansible_user }}"
 jenkins_agent_port: 8022
 
-# SSH configuration
-ssh_port: 8022 # Termux SSH daemon port
+ssh_port: 8022
 ssh_key_type: ed25519
 ssh_key_path: "{{ termux_home }}/.ssh"
 
-# Build tools versions
 python_version: latest
 git_version: latest
 
-# Resource limits
-jenkins_memory_mb: 512 # Minimal memory for Jenkins
-max_executors: 2 # Max concurrent builds on agent
+jenkins_memory_mb: 512
+max_executors: 2
 
-# JCasC configuration
 jcasc_config_path: "{{ jenkins_home }}/jenkins.yaml"
 jcasc_reload_token: "{{ lookup('env', 'JCASC_RELOAD_TOKEN') | default('changeme', true) }}"
 EOF
@@ -416,6 +409,7 @@ EOF
     print_success "hosts.yaml: $HOSTS_FILE"
 }
 
+# ─── КОПІЮВАННЯ SSH КЛЮЧА ─────────────────────────────────────────────────────
 copy_ssh_key() {
     print_step "Копіювання SSH ключа на Termux"
 
@@ -429,7 +423,6 @@ copy_ssh_key() {
         return 1
     fi
 
-    # Перевірка — чи ключ вже є на пристрої
     if ssh \
            -o BatchMode=yes \
            -o StrictHostKeyChecking=no \
@@ -452,7 +445,7 @@ copy_ssh_key() {
             -p "$SSH_PORT" \
             -o StrictHostKeyChecking=no \
             -o UserKnownHostsFile=/dev/null \
-           -o PubkeyAuthentication=no \
+            -o PubkeyAuthentication=no \
             "${TERMUX_USER}@${PHONE_IP}"; then
         print_success "SSH ключ скопійовано на Termux"
     else
@@ -465,6 +458,7 @@ copy_ssh_key() {
         return 1
     fi
 }
+
 # ─── ЗАПУСК ПЛЕЙБУКУ ─────────────────────────────────────────────────────────
 run_playbook() {
     local playbook="$1"
@@ -492,10 +486,10 @@ try_restore_previous() {
     [ -f "$HOSTS_FILE" ] || return 1
 
     local old_ip old_port old_user old_adb
-    old_ip=$(awk   '/ansible_host:/{print $2}'                    "$HOSTS_FILE" | head -1)
-    old_port=$(awk '/ansible_port:/{print $2}'                    "$HOSTS_FILE" | head -1)
-    old_user=$(awk '/ansible_user:/{gsub(/"/, ""); print $2}'     "$HOSTS_FILE" | head -1)
-    old_adb=$(awk  '/adb_identify:/{print $2}'                    "$HOSTS_FILE" | head -1)
+    old_ip=$(awk   '/ansible_host:/{print $2}'                "$HOSTS_FILE" | head -1)
+    old_port=$(awk '/ansible_port:/{print $2}'                "$HOSTS_FILE" | head -1)
+    old_user=$(awk '/ansible_user:/{gsub(/"/, ""); print $2}' "$HOSTS_FILE" | head -1)
+    old_adb=$(awk  '/adb_identify:/{print $2}'                "$HOSTS_FILE" | head -1)
 
     [ -z "$old_ip" ] && return 1
 
@@ -530,10 +524,7 @@ generate_post_install() {
 
     cat > "$POST_INSTALL_SCRIPT" << SCRIPT_EOF
 #!/bin/bash
-# =============================================================================
 # post-install.sh — Етап 2: Ansible + Jenkins у Termux
-# Згенеровано автоматично install.sh
-# =============================================================================
 set -euo pipefail
 
 ANSIBLE_CFG="${_cfg}"
@@ -586,15 +577,17 @@ SCRIPT_EOF
 update_gitignore() {
     local gitignore
     gitignore="$(dirname "$SCRIPT_DIR")/.gitignore"
-    for entry in \
+    # Видаляємо старі записи що вказували на репо
+    for old_entry in \
         "init/ansible.cfg" \
         "init/hosts.yaml" \
         "init/group_vars/" \
         "init/.vault_pass" \
         "init/post-install.sh"; do
-        grep -qxF "$entry" "$gitignore" 2>/dev/null || echo "$entry" >> "$gitignore"
+        sed -i "\|^${old_entry}$|d" "$gitignore" 2>/dev/null || true
     done
-    print_success ".gitignore оновлено"
+    # ANSIBLE_DIR поза репо — нічого не треба ігнорувати
+    print_success ".gitignore оновлено (ansible файли тепер поза репо)"
 }
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -607,8 +600,11 @@ main() {
     install_ansible
     install_tools
     setup_ssh_key
+    init_ansible_dir
 
-# ── Швидкий шлях: якщо Етап 1 вже виконано — пропонуємо одразу Етап 2 ──
+    print_info "Ansible директорія: $ANSIBLE_DIR"
+
+    # ── Швидкий шлях ─────────────────────────────────────────────────────────
     if stage2_ready; then
         print_sep
         print_success "Знайдено готовий post-install.sh від попереднього запуску."
@@ -619,14 +615,14 @@ main() {
         read -r -p "Запустити зараз? (Y/n/skip): " quick < /dev/tty
         case "${quick:-Y}" in
             [Yy]*) bash "$POST_INSTALL_SCRIPT"; exit 0 ;;
-            skip)  : ;;  # продовжити повне налаштування
+            skip)  : ;;
             *)     print_info "Запустіть вручну: bash $POST_INSTALL_SCRIPT"; exit 0 ;;
         esac
         print_info "Продовжуємо повне налаштування..."
         print_sep
     fi
 
-    # ── Крок 1: ADB + IP + SSH порт (без user) ───────────────────────────────
+    # ── Крок 1: Дані пристрою ────────────────────────────────────────────────
     print_step "КРОК 1: Дані пристрою"
 
     TERMUX_USER=""; ADB_ID=""; PHONE_IP=""; SSH_PORT="8022"
@@ -643,12 +639,12 @@ main() {
     print_step "КРОК 2: Паролі"
     setup_vault
 
-    # ── Крок 3: ansible.cfg (hosts генерується пізніше — потрібен TERMUX_USER)
+    # ── Крок 3: Конфігурація ─────────────────────────────────────────────────
     print_step "КРОК 3: Генерація конфігурації"
     generate_ansible_cfg
     update_gitignore
 
-# ── Крок 4: Етап 1 — init-android.yml (ADB + preinit Termux) ────────────
+    # ── Крок 4: Етап 1 ───────────────────────────────────────────────────────
     print_sep
     echo -e "${BOLD}Готово до Етапу 1:${NC}"
     echo "  ADB:      ${ADB_ID:-—}"
@@ -683,7 +679,7 @@ EOF
         print_info "Пропущено."
     fi
 
-    # ── Крок 5: Підготовка / запуск Етапу 2 ─────────────────────────────────
+    # ── Крок 5: Етап 2 ───────────────────────────────────────────────────────
     print_step "КРОК 5: Підготовка Етапу 2 (Ansible + Jenkins)"
     echo ""
     print_info "Переконайтесь що Termux запущений та SSH доступний: ${PHONE_IP}:${SSH_PORT}"
@@ -693,8 +689,6 @@ EOF
     if [[ "${run2:-N}" =~ ^[Yy]$ ]]; then
         run_stage2
     else
-        # ▼▼▼ ГОЛОВНА ЗМІНА: генеруємо post-install.sh НАВІТЬ при відмові ▼▼▼
-        # Потрібен TERMUX_USER для генерації — питаємо якщо ще не знаємо
         if [[ -z "${TERMUX_USER:-}" ]]; then
             print_info "Для генерації post-install.sh потрібен Termux user."
             get_termux_user
@@ -710,6 +704,11 @@ EOF
         print_info "Повторний запуск install.sh НЕ потрібен."
         print_sep
     fi
+
+    echo ""
+    echo -e "${BOLD}Ansible директорія:${NC} $ANSIBLE_DIR"
+    echo -e "${BOLD}SSH доступ:${NC}"
+    echo "  ssh -p ${SSH_PORT} ${TERMUX_USER:-<user>}@${PHONE_IP}"
 }
 
 main
