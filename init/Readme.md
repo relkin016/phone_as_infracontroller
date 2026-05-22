@@ -15,9 +15,9 @@
 Перед розгортанням переконайтеся, що усі умови вище задоволені, та виконайте команди
 ```bash
 # На пристрої з Debian/Ubuntu/LMDE (для роботи з Ansible)
-sudo apt-get update && sudo apt-get install git
-git clone https://github.com/relkin016/pxe-autoinstall-tmux
-cd pxe-autoinstall-tmux/init
+sudo apt-get update && sudo apt-get install git ansible -y
+git clone https://github.com/relkin016/phone_as_infracontroller.git
+cd phone_as_infracontroller/init
 bash install.sh
 ```
 
@@ -48,15 +48,7 @@ whoami          # Це ваше ім'я
 #### Після проведення встановлення та налаштування Termux необхідно повністю налаштувати МКВ до роботи
 1. Запустіть скрипт додавання користувача:
 ```bash
-bash "$HOME/post-install.sh"
+bash "$HOME/ansible/post-install.sh"
 ```
 та підтвердіть автозапуск другого етапу.
 **Після проходження 2-го етапу ЕОМ буде налаштована у ролі МКВ**
-
-[//]: # (TODO rebase ansible playbooks to role)
-
-#### Для тестування ролі МКВ можна використати готовий пайплайн з директорії pipelines
-
-
-
-[//]: # (TODO: busybox + pxe + iso)
