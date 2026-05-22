@@ -1,4 +1,4 @@
-# init/playbooks/roles/termux-base/tasks/copy.yml
+# init/playbooks/roles/ansible/tasks/copy.yml
 - name: Ensure ansible group_vars directory exists
   ansible.builtin.file:
     path: "{{ termux_home }}/ansible/group_vars/all"
@@ -14,3 +14,5 @@
   ansible.builtin.copy:
     src: "{{ lookup('env', 'HOME') }}/ansible/.vault_pass"
     dest: "{{ termux_home }}/ansible/.vault_pass"
+
+- name: Generate ansible.cfg
