@@ -1,4 +1,4 @@
-# init/playbooks/roles/ansible/tasks/copy.yml
+# init/playbooks/roles/ansible/tasks/configure.yml
 - name: Ensure ansible group_vars directory exists
   ansible.builtin.file:
     path: "{{ item }}"

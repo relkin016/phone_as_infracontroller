@@ -1,6 +1,6 @@
 # init/playbooks/roles/ansible/defaults/main.yml
 
-ansible_dir:      "{{ lookup('env', 'HOME') }}/ansible"
+ansible_dir:      "{{ termux_home }}/ansible"
 roles_path:       "{{ ansible_dir }}/roles"
 vault_pass_file:  "{{ ansible_dir }}/.vault_pass"
 hosts_file:       "{{ ansible_dir }}/hosts.yaml"
