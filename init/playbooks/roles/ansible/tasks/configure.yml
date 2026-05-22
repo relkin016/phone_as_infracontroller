@@ -20,16 +20,18 @@
     dest: "{{ termux_home }}/ansible/.vault_pass"
 
 - name: Згенерувати ansible.cfg
-  ini_file:
+  ansible.builtin.ini_file:
     path: "{{ ansible_dir }}/ansible.cfg"
     mode: '0644'
     section: "{{ item.section }}"
     option: "{{ item.option }}"
     value: "{{ item.value }}"
   loop:
-    - { section: defaults, option: host_key_checking,   value: "False" }
+    - { section: defaults, option: host_key_checking,   value: "false" }
     - { section: defaults, option: vault_password_file, value: "{{ ansible_dir }}/.vault_pass" }
     - { section: defaults, option: inventory,           value: "{{ ansible_dir }}/hosts.yaml" }
     - { section: defaults, option: roles_path,          value: "{{ roles_path }}" }
     - { section: ssh_connection, option: ssh_args,      value: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" }
-    - { section: ssh_connection, option: pipelining,    value: "True" }
+    - { section: ssh_connection, option: pipelining,    value: "true" }
+    - { section: privilege_escalation, option: become,        value: "true" }
+    - { section: privilege_escalation, option: become_method, value: "sudo" }
