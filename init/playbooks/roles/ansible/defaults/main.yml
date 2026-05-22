@@ -1,0 +1,9 @@
+# init/playbooks/roles/ansible/defaults/main.yml
+
+ansible_dir:      "{{ lookup('env', 'HOME') }}/ansible"
+roles_path:       "{{ ansible_dir }}/roles"
+vault_pass_file:  "{{ ansible_dir }}/.vault_pass"
+hosts_file:       "{{ ansible_dir }}/hosts.yaml"
+vault_file:       "{{ ansible_dir }}/group_vars/all/vault.yaml"
+vars_file:        "{{ ansible_dir }}/group_vars/termux/vars.yaml"
+post_install:     "{{ ansible_dir }}/post-install.sh"
