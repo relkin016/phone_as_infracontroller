@@ -1,21 +1,19 @@
-- name: Configure Android permissions and power consumption
-  when: hostvars['bangkk']['ansible_host'] is defined
-  block:
-    - name: Disable battery optimization
-      ansible.builtin.shell: "adb -s {{ android_device }} shell dumpsys deviceidle whitelist +{{ item }}"
-      loop:
-        - com.termux
-        - com.termux.api
-        - com.termux.boot
-      register: doze_result
-      changed_when: "'Added' in doze_result.stdout"
+# init/playbooks/roles/tmux-preinit/tasks/tmux-batt.yml
+- name: Disable battery optimization
+  ansible.builtin.shell: "adb -s {{ android_device }} shell dumpsys deviceidle whitelist +{{ item }}"
+  loop:
+    - com.termux
+    - com.termux.api
+    - com.termux.boot
+  register: doze_result
+  changed_when: "'Added' in doze_result.stdout"
 
-    - name: Allow Termux to run in background
-      ansible.builtin.shell: "adb -s {{ android_device }} shell cmd appops set com.termux {{ item }} allow"
-      loop:
-        - RUN_IN_BACKGROUND
-        - RUN_ANY_IN_BACKGROUND
-        - START_FOREGROUND
-      register: appops_result
-      failed_when: false
-      changed_when: appops_result.rc == 0
+- name: Allow Termux to run in background
+  ansible.builtin.shell: "adb -s {{ android_device }} shell cmd appops set com.termux {{ item }} allow"
+  loop:
+    - RUN_IN_BACKGROUND
+    - RUN_ANY_IN_BACKGROUND
+    - START_FOREGROUND
+  register: appops_result
+  failed_when: false
+  changed_when: appops_result.rc == 0

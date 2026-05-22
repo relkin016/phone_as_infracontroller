@@ -1,12 +1,4 @@
----
-# Jenkins Configuration as Code (JCasC) - Reference Documentation
-#
-# NOTE: This file is reference documentation showing the JCasC structure.
-# The actual deployment uses the templated version from:
-# ansible/roles/jenkins-jcasc/templates/jenkins.yaml.j2
-#
-# The template substitutes variables like {{ jenkins_agent_user }} with actual values
-# from group_vars and role defaults during Ansible playbook execution.
+# init/playbooks/roles/jenkins/files/jenkins.yaml
 
 jenkins:
   systemMessage: "Jenkins on Android"

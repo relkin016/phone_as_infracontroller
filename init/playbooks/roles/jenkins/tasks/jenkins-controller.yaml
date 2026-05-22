@@ -1,3 +1,4 @@
+# init/playbooks/roles/jenkins/tasks/jenkins-controller.yaml
 - name: Install OpenJDK
   ansible.builtin.command: "{{ termux_bin }}/pkg install -y {{ openjdk_package_name }}"
   register: java_install_result

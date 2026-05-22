@@ -1,31 +1,15 @@
----
-# Main tasks for termux-base role
-# Sets up basic Termux environment with SSH and essential packages
-
-- name: Ensure ~/.termux/boot directory exists
-  ansible.builtin.file:
-    path: "{{ termux_home }}/.termux/boot"
-    state: directory
-    mode: '0755'
-
-- name: Create sshd autostart script for Termux Boot
-  ansible.builtin.shell: |
-    cat > {{ termux_home }}/.termux/boot/start-sshd.sh << 'EOF'
-    #!/data/data/com.termux/files/usr/bin/bash
-    sshd
-    EOF
-    chmod 0755 {{ termux_home }}/.termux/boot/start-sshd.sh
-  args:
-    executable: /data/data/com.termux/files/usr/bin/bash
-    creates: "{{ termux_home }}/.termux/boot/start-sshd.sh"
-
+# init/playbooks/roles/jenkins/tasks/termux-base.yaml
 - name: Clean apt cache
   ansible.builtin.shell: "apt clean && rm -rf /data/data/com.termux/files/usr/var/lib/apt/lists/*"
   changed_when: false
 
 - name: Update package list
-  ansible.builtin.shell: "pkg update -y"
-  changed_when: false
+  ansible.builtin.shell: |
+    pkg update -y || \
+    (termux-change-repo --mirror https://packages-cf.termux.dev/apt/termux-main && \
+     pkg update -y)
+  register: pkg_update
+  changed_when: "'upgraded' in pkg_update.stdout"
 
 - name: Install core Termux packages
   ansible.builtin.command: "{{ termux_bin }}/pkg install -y {{ item }}"
