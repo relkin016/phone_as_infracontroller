@@ -14,10 +14,14 @@
     src: "{{ lookup('env', 'HOME') }}/ansible/group_vars/all/vault.yaml"
     dest: "{{ termux_home }}/ansible/group_vars/all/vault.yaml"
 
-- name: Copy ansible vault_pass file
-  ansible.builtin.copy:
-    src: "{{ lookup('env', 'HOME') }}/ansible/.vault_pass"
-    dest: "{{ termux_home }}/ansible/.vault_pass"
+- name: Copy encrypted vault file without decryption
+  ansible.builtin.command:
+    cmd: >
+      scp -o StrictHostKeyChecking=no
+      "{{ lookup('env', 'HOME') }}/ansible/group_vars/all/vault.yaml"
+      "{{ ansible_user }}@{{ inventory_hostname }}:{{ termux_home }}/ansible/group_vars/all/vault.yaml"
+  delegate_to: localhost
+
 
 - name: Згенерувати ansible.cfg
   ansible.builtin.ini_file:
