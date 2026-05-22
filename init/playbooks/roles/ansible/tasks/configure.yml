@@ -14,16 +14,14 @@
     src: "{{ lookup('env', 'HOME') }}/ansible/group_vars/all/vault.yaml"
     dest: "{{ termux_home }}/ansible/group_vars/all/vault.yaml"
 
-- name: Copy encrypted vault file without decryption
+- name: Re-encrypt vault file on target
   ansible.builtin.command:
-    cmd: >
-      scp -o StrictHostKeyChecking=no
-      "{{ lookup('env', 'HOME') }}/ansible/group_vars/all/vault.yaml"
-      "{{ ansible_user }}@{{ inventory_hostname }}:{{ termux_home }}/ansible/group_vars/all/vault.yaml"
-  delegate_to: localhost
+    cmd: ansible-vault encrypt "{{ termux_home }}/ansible/group_vars/all/vault.yaml"
+  environment:
+    ANSIBLE_VAULT_PASSWORD_FILE: "{{ termux_home }}/ansible/.vault_pass"
 
 
-- name: Згенерувати ansible.cfg
+- name: Genetate ansible.cfg
   ansible.builtin.ini_file:
     path: "{{ ansible_dir }}/ansible.cfg"
     mode: '0644'
