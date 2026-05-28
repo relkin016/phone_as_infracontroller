@@ -31,7 +31,7 @@ bash install.sh
 pkg update && yes | pkg upgrade -y
 
 # 2. Інсталювати залежності для роботи з Ansible
-pkg install openssh python
+pkg install openssh python3 -y
 
 # 3. Налаштувати пароль користувача (для роботи по SSH)
 passwd
