@@ -318,7 +318,7 @@ setup_vault() {
     cat > "$VAULT_FILE" << VAULT_EOF
 ---
 ssh_pass: $SSH_PASS
-jenkins_admin_password: $JENKINS_PASS
+vault_jenkins_admin_password: $JENKINS_PASS
 VAULT_EOF
 
     if ansible-vault view "$VAULT_FILE" \
